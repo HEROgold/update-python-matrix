@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+
+      - name: Test
+        run: uv run pytest
+
+  # Run the action itself on a fixture workflow, without opening a PR.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write a fixture workflow with an old matrix
+        run: |
+          mkdir -p fixture
+          printf 'python-version:\n  - "3.13"\n' > fixture/test.yml
+
+      - name: Update it
+        id: update
+        run: python3 update_matrix.py fixture/test.yml
+
+      - name: Check the result
+        env:
+          CHANGED: ${{ steps.update.outputs.changed }}
+          VERSIONS: ${{ steps.update.outputs.versions }}
+        run: |
+          cat fixture/test.yml
+          test "$CHANGED" = true
+          echo "$VERSIONS" | jq -e '.[0] == "3.13" and length > 1'

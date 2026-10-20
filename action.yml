@@ -1,0 +1,54 @@
+name: 'update-python-matrix'
+description: 'Keeps a workflow''s Python version matrix in step with endoflife.date, and opens a PR when it changes.'
+inputs:
+  github_token:
+    description: 'Token used to push the branch and open the PR. Needs contents: write and pull-requests: write.'
+    required: true
+  workflow:
+    description: 'The workflow file holding the matrix.'
+    required: false
+    default: '.github/workflows/test.yml'
+  key:
+    description: 'The matrix key whose block list holds the Python versions.'
+    required: false
+    default: 'python-version'
+  branch:
+    description: 'The branch the update is pushed to. Later runs update the same branch and PR.'
+    required: false
+    default: 'chore/update-python-matrix'
+outputs:
+  changed:
+    description: '`true` when the matrix was updated.'
+    value: ${{ steps.update.outputs.changed }}
+  versions:
+    description: 'The new list of versions, as a JSON array.'
+    value: ${{ steps.update.outputs.versions }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Update the matrix
+      id: update
+      shell: bash
+      env:
+        WORKFLOW: ${{ inputs.workflow }}
+        KEY: ${{ inputs.key }}
+      run: python3 "${{ github.action_path }}/update_matrix.py" "$WORKFLOW" --key "$KEY"
+
+    - name: Open or update the PR
+      if: steps.update.outputs.changed == 'true'
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      with:
+        token: ${{ inputs.github_token }}
+        add-paths: ${{ inputs.workflow }}
+        commit-message: 'chore: update Python version matrix'
+        title: 'chore: update Python version matrix'
+        body: |
+          Automated update of the Python version matrix in `${{ inputs.workflow }}`
+          to ${{ steps.update.outputs.versions }}: every release from the current
+          floor up that is not past end of life, per endoflife.date.
+
+          Review before merging: a wider or narrower matrix can surface new
+          compatibility issues.
+        branch: ${{ inputs.branch }}
+        delete-branch: true
